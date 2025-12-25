@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>마피아 게임 시뮬레이터</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Noto Sans KR', sans-serif; background-color: #1a1a2e; color: #e0e0e0; }
+        /* 스크롤바 숨김 */
+        .scroll-hide::-webkit-scrollbar { display: none; }
+        .scroll-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .card { transition: all 0.3s ease; }
+        .alive { border-left: 4px solid #4ade80; background-color: #16213e; }
+        .dead { border-left: 4px solid #ef4444; background-color: #0f3460; opacity: 0.6; filter: grayscale(0.8); }
+        
+        .log-entry { margin-bottom: 8px; padding: 8px; border-radius: 4px; border-bottom: 1px solid #2a2a40; line-height: 1.5; }
+        .log-day { color: #bfdbfe; }
+        .log-night { color: #c084fc; }
+        .log-system { color: #fbbf24; font-weight: bold; }
+        .log-death { color: #ef4444; font-weight: bold; }
+        
+        .role-mafia { color: #ef4444; }
+        .role-cop { color: #3b82f6; }
+        .role-doctor { color: #22c55e; }
+        .role-citizen { color: #9ca3af; }
+        
+        .modal-overlay { background-color: rgba(0, 0, 0, 0.8); backdrop-filter: blur(4px); }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-gray-900 p-4 border-b border-gray-700 flex justify-between items-center shadow-lg z-10">
+        <h1 class="text-xl font-bold flex items-center gap-2">
+            <i class="fas fa-user-secret"></i> 마피아 게임 시뮬레이터 
+            <a href="https://x.com/bb_uu_t" target="_blank"><span class="text-xs font-normal text-slate-500 dark:text-slate-400 ml-1">@bb_uu_t</span></a>
+        </h1>
+        <div class="text-sm text-gray-400" id="game-status-text">준비 단계</div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex overflow-hidden">
+        <!-- Left Panel: Game Board & Setup -->
+        <div class="flex-1 flex flex-col p-4 overflow-y-auto scroll-hide relative" id="game-board">
+            
+            <!-- Setup View -->
+            <div id="setup-view" class="max-w-2xl mx-auto w-full">
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-6">
+                    <h2 class="text-lg font-bold mb-4 border-b border-gray-600 pb-2 flex justify-between items-center">
+                        <span>참가자 명단 작성</span>
+                        <div class="space-x-2">
+                            <button onclick="exportList()" class="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded" title="저장"><i class="fas fa-download"></i></button>
+                            <label class="text-xs bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded cursor-pointer" title="불러오기">
+                                <i class="fas fa-upload"></i>
+                                <input type="file" id="import-file" class="hidden" accept=".json" onchange="importList(this)">
+                            </label>
+                        </div>
+                    </h2>
+                    <div class="flex gap-2 mb-4">
+                        <input type="text" id="player-name-input" placeholder="이름 입력" class="flex-1 bg-gray-700 border border-gray-600 rounded px-3 py-2 focus:outline-none focus:border-blue-500 text-white" onkeypress="handleInput(event)">
+                        <button onclick="addPlayer()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition"><i class="fas fa-plus"></i> 추가</button>
+                        <button onclick="addRandomPlayers(4)" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded transition text-sm">랜덤 4명</button>
+                    </div>
+                    <div class="mb-4">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm text-gray-400">현재 인원: <span id="player-count">0</span>명 (최소 4명, 최대 28명)</span>
+                            <div class="space-x-2">
+                                <button onclick="openManualRoleModal()" class="text-xs text-yellow-400 hover:text-yellow-300"><i class="fas fa-cog"></i> 직업 지정</button>
+                                <button onclick="clearPlayers()" class="text-xs text-red-400 hover:text-red-300">초기화</button>
+                            </div>
+                        </div>
+                        <ul id="player-list" class="space-y-2 max-h-60 overflow-y-auto pr-2"></ul>
+                    </div>
+                    <div class="bg-gray-900 p-4 rounded text-sm text-gray-400 mb-6">
+                        <p class="font-bold mb-2 text-green-400">🔫 게임 규칙</p>
+                        <ul class="list-disc list-inside space-y-1 text-xs">
+                            <li><strong>시민 팀:</strong> 시민, 경찰, 의사가 존재합니다.</li>
+                            <li><strong>마피아:</strong> 마피아는 서로 협의 하에 매일 밤 시민 1명을 공격합니다.</li>
+                            <li><strong>특수 직업:</strong>경찰은 매일 밤 1명을 선택해 마피아인지 수사하며, 의사는 선택한 사람을 살릴 수 있습니다.</li>
+                            <li><strong>투표:</strong> 시민은 특별한 능력이 없으며, 투표를 통해 마피아로 의심되는 사람을 처형할 수 있습니다.</li>
+                            <li><strong>승리 조건:</strong> 마피아가 시민 수와 같아지면 마피아 승리, 시민이 모든 마피아를 제거하면 시민 승리입니다.</li>
+                            <li><strong>직업 제한:</strong> 의사는 6명 이상일 때, 경찰은 7명 이상일 때 존재합니다.</li>
+                        </ul>
+                    </div>
+                    <button onclick="startGame()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow transition transform hover:scale-[1.01]">게임 시작</button>
+                </div>
+            </div>
+
+            <!-- Play View (Cards) -->
+            <div id="play-view" class="hidden w-full max-w-5xl mx-auto">
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" id="player-cards"></div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Logs & Controls -->
+        <div class="w-full md:w-96 bg-gray-800 border-l border-gray-700 flex flex-col shadow-2xl z-20">
+            <div class="p-4 border-b border-gray-700 bg-gray-800 flex justify-between items-center">
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-lg">게임 로그</span>
+                    <button id="btn-restart-log" onclick="resetGame()" class="hidden text-xs bg-red-600 hover:bg-red-500 text-white px-2 py-1 rounded shadow"><i class="fas fa-redo"></i> 다시하기</button>
+                </div>
+                <label class="flex items-center cursor-pointer text-xs select-none">
+                    <input type="checkbox" id="god-mode-toggle" class="mr-2" onchange="toggleGodMode()">
+                    <span class="text-yellow-400"><i class="fas fa-eye"></i> 직업 공개</span>
+                </label>
+            </div>
+            <div id="game-controls" class="hidden p-4 bg-gray-800 border-b border-gray-700">
+                <button onclick="nextPhase()" id="btn-next" class="w-full bg-blue-600 hover:bg-blue-500 text-white py-2 rounded font-bold shadow transition">
+                    게임 시작
+                </button>
+            </div>
+            <div id="game-log" class="flex-1 overflow-y-auto p-4 text-sm font-mono bg-gray-900 space-y-1">
+                <div class="text-gray-500 text-center italic mt-10">게임이 시작되면 로그가 표시됩니다.</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Role Assignment Modal -->
+    <div id="role-modal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50">
+        <div class="bg-gray-800 p-6 rounded-lg shadow-xl max-w-md w-full border border-gray-600">
+            <h3 class="text-lg font-bold mb-2">직업 수동 지정</h3>
+            <div id="manual-role-list" class="space-y-2 mb-4 max-h-80 overflow-y-auto pr-2"></div>
+            <div class="flex justify-end gap-2 border-t border-gray-700 pt-4">
+                <button onclick="closeRoleModal()" class="px-4 py-2 bg-gray-600 rounded hover:bg-gray-500 text-sm">닫기</button>
+                <button onclick="saveManualRoles()" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-500 text-white text-sm">적용</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Game Over Modal -->
+    <div id="game-over-modal" class="hidden fixed inset-0 modal-overlay flex items-center justify-center z-50" onclick="if(event.target === this) closeResultModal()">
+        <div class="bg-gray-800 p-8 rounded-lg shadow-2xl text-center border border-gray-600 max-w-lg w-full relative">
+            <h2 id="end-title" class="text-3xl font-bold mb-4"></h2>
+            <div class="mb-6 text-left bg-gray-900 p-4 rounded max-h-60 overflow-y-auto border border-gray-700">
+                <ul id="end-result-list" class="text-sm space-y-1"></ul>
+            </div>
+            <div class="text-xs text-gray-500 mb-4">* 배경을 클릭하면 로그를 확인할 수 있습니다.</div>
+            <div class="flex justify-center gap-3">
+                <button onclick="resetGame()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded transition shadow-lg">
+                    <i class="fas fa-redo"></i> 다시 하기
+                </button>
+            </div>
+        </div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>

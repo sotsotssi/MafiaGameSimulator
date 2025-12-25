@@ -34,9 +34,9 @@ const CONFIG = {
         24: { M: 6, P: 1, D: 1 },
         25: { M: 6, P: 1, D: 1 },
         
-        26: { M: 7, P: 2, D: 2 },
-        27: { M: 7, P: 2, D: 2 },
-        28: { M: 7, P: 2, D: 2 }
+        26: { M: 7, P: 1, D: 1 },
+        27: { M: 7, P: 1, D: 1 },
+        28: { M: 7, P: 1, D: 1 }
     },
     BALANCE: { BASE_SUSPICION: 10, BASE_ATTENTION: 10, VOTE_THRESHOLD_BASE: 15 }
 };
@@ -928,3 +928,4 @@ function saveManualRoles() {
     closeRoleModal(); renderPlayerList();
 }
 function closeRoleModal() { document.getElementById('role-modal').classList.add('hidden'); }
+
